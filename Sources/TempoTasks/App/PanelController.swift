@@ -10,6 +10,9 @@ final class FloatingPanel: NSPanel {
 final class PanelController: NSObject, NSWindowDelegate {
     private let panel: FloatingPanel
     private let viewModel: TaskPanelViewModel
+    private var positionMemory = PanelPositionMemory()
+    private var screenParametersChangedWhileHidden = false
+    private var screenParametersObserver: NSObjectProtocol?
 
     init(viewModel: TaskPanelViewModel) {
         self.viewModel = viewModel
@@ -34,9 +37,29 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = NSHostingView(
             rootView: TaskPanelView(
                 viewModel: viewModel,
-                onClose: { [weak self] in self?.hide() }
+                onClose: { [weak self] in self?.hide() },
+                onDragBegan: { [weak self] in self?.beginUserDrag() },
+                onDragEnded: { [weak self] originalFrame, currentFrame in
+                    self?.endUserDrag(originalFrame: originalFrame, currentFrame: currentFrame)
+                }
             )
         )
+
+        screenParametersObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.screenParametersDidChange()
+            }
+        }
+    }
+
+    deinit {
+        if let screenParametersObserver {
+            NotificationCenter.default.removeObserver(screenParametersObserver)
+        }
     }
 
     var isVisible: Bool { panel.isVisible }
@@ -47,7 +70,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func show() {
         viewModel.prepareForPresentation()
-        positionOnCurrentScreen()
+        preparePositionForPresentation()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
@@ -69,6 +92,45 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    private func beginUserDrag() {
+        positionMemory.beginDrag(at: panel.frame)
+    }
+
+    private func endUserDrag(originalFrame: NSRect, currentFrame: NSRect) {
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        guard let storedFrame = positionMemory.endDrag(
+            originalFrame: originalFrame,
+            currentFrame: currentFrame,
+            visibleFrames: visibleFrames
+        ) else {
+            return
+        }
+        panel.setFrame(storedFrame, display: true)
+    }
+
+    private func preparePositionForPresentation() {
+        if !screenParametersChangedWhileHidden,
+           let storedFrame = positionMemory.storedFrame {
+            panel.setFrame(storedFrame, display: false)
+            return
+        }
+
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        if let storedFrame = positionMemory.validStoredFrame(in: visibleFrames) {
+            panel.setFrame(storedFrame, display: false)
+        } else {
+            positionOnCurrentScreen()
+        }
+        screenParametersChangedWhileHidden = false
+    }
+
+    private func screenParametersDidChange() {
+        screenParametersChangedWhileHidden = true
+        if panel.isVisible {
+            preparePositionForPresentation()
+        }
+    }
+
     private func positionOnCurrentScreen() {
         let mouseLocation = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouseLocation, $0.frame, false) }
@@ -76,11 +138,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             ?? NSScreen.screens.first
         guard let screen else { return }
 
-        let visibleFrame = screen.visibleFrame
-        let origin = NSPoint(
-            x: visibleFrame.midX - panel.frame.width / 2,
-            y: visibleFrame.maxY - panel.frame.height - 64
+        let frame = PanelPositionMemory.defaultFrame(
+            panelSize: panel.frame.size,
+            in: screen.visibleFrame
         )
-        panel.setFrameOrigin(origin)
+        panel.setFrame(frame, display: false)
     }
 }

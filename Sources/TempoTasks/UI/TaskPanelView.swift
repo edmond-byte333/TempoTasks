@@ -1,8 +1,11 @@
+import AppKit
 import SwiftUI
 
 struct TaskPanelView: View {
     @Bindable var viewModel: TaskPanelViewModel
     let onClose: () -> Void
+    let onDragBegan: () -> Void
+    let onDragEnded: (NSRect, NSRect) -> Void
 
     var body: some View {
         ZStack {
@@ -15,7 +18,11 @@ struct TaskPanelView: View {
             )
 
             HStack(spacing: 0) {
-                DateRailView(viewModel: viewModel)
+                DateRailView(
+                    viewModel: viewModel,
+                    onDragBegan: onDragBegan,
+                    onDragEnded: onDragEnded
+                )
                     .frame(width: 164)
 
                 Rectangle()
@@ -62,6 +69,12 @@ struct TaskPanelView: View {
         .padding(.horizontal, 26)
         .padding(.top, 22)
         .padding(.bottom, 16)
+        .overlay {
+            WindowDragSurface(
+                onDragBegan: onDragBegan,
+                onDragEnded: onDragEnded
+            )
+        }
     }
 
     private var headerTitle: String {
@@ -87,6 +100,8 @@ struct TaskPanelView: View {
 
 private struct DateRailView: View {
     @Bindable var viewModel: TaskPanelViewModel
+    let onDragBegan: () -> Void
+    let onDragEnded: (NSRect, NSRect) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -106,6 +121,12 @@ private struct DateRailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 19)
             .padding(.bottom, 24)
+            .overlay {
+                WindowDragSurface(
+                    onDragBegan: onDragBegan,
+                    onDragEnded: onDragEnded
+                )
+            }
 
             Text("日程")
                 .font(.system(size: 10, weight: .semibold, design: .monospaced))
