@@ -62,6 +62,16 @@ final class PanelPositionMemoryTests: XCTestCase {
         XCTAssertNil(memory.storedFrame)
     }
 
+    func testActualWindowMoveCanBeRememberedAfterDragCallbackReturns() {
+        var memory = PanelPositionMemory()
+        let moved = initial.offsetBy(dx: 80, dy: -40)
+
+        let stored = memory.rememberMovedFrame(moved, visibleFrames: [screen])
+
+        XCTAssertEqual(stored, moved)
+        XCTAssertEqual(memory.validStoredFrame(in: [screen]), moved)
+    }
+
     func testDefaultFrameIsTopCenteredAndFullyVisible() {
         let frame = PanelPositionMemory.defaultFrame(
             panelSize: NSSize(width: 760, height: 520),
@@ -72,4 +82,3 @@ final class PanelPositionMemoryTests: XCTestCase {
         XCTAssertTrue(PanelPositionMemory.isFullyVisible(frame, in: [screen]))
     }
 }
-

@@ -20,8 +20,8 @@ TempoTasks 悬浮面板允许用户拖动，并在 App 本次运行期间记住�
 - `PanelController` 负责保存本次运行的位置状态，不写入 `UserDefaults`，也不使用窗口 frame autosave。
 - SwiftUI 品牌区与标题区各自覆盖一个专用拖动表面。拖动表面只覆盖静态内容，不覆盖任何按钮、输入控件、列表、滚动区域或 popover；子控件事件始终优先。
 - 拖动表面的原生视图在 `mouseDown` 时调用 `PanelController.beginUserDrag()`，再把事件交给 `NSWindow.performDrag(with:)`。该调用返回后调用 `PanelController.endUserDrag(originalFrame:currentFrame:)`。
-- `PanelController` 只有在 begin/end 配对完成且 frame 确实变化时才写入会话 frame 并设置 `hasUserPosition = true`。拖动取消或 frame 未变化时不写入位置。
-- 默认定位和屏幕回退直接设置 frame，不经过 begin/end 接口，因此不会被误判为用户拖动。窗口移动通知不负责判断事件来源，也不写入会话位置。
+- `PanelController` 以 `windowDidMove` 收到的实际 frame 为最终位置来源，因为 `NSWindow.performDrag(with:)` 可能先返回、随后才发布移动事件。拖动 begin/end 回调用于发起拖动和同步结束时已经可见的 frame，窗口移动通知负责补获异步到达的最终坐标。
+- 默认定位和屏幕回退通过 `isApplyingProgrammaticFrame` 包裹设置 frame；该标记存在时 `windowDidMove` 不写入会话位置。其余实际窗口移动会更新内存中的最后位置。
 - `PanelController` 监听 `NSApplication.didChangeScreenParametersNotification`。面板显示时立即校验位置；面板隐藏时标记待校验，并在下次显示前完成校验。
 - 现有 `Control + Space`、菜单栏入口、自动聚焦、日期 popover 和点击外部隐藏行为保持不变。
 

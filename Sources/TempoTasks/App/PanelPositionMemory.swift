@@ -36,6 +36,15 @@ struct PanelPositionMemory {
         return storedFrame
     }
 
+    @discardableResult
+    mutating func rememberMovedFrame(_ frame: NSRect, visibleFrames: [NSRect]) -> NSRect? {
+        guard let constrained = Self.constrainedFrame(frame, to: visibleFrames) else {
+            return nil
+        }
+        storedFrame = constrained
+        return constrained
+    }
+
     static func defaultFrame(
         panelSize: NSSize,
         in visibleFrame: NSRect,
@@ -88,4 +97,3 @@ struct PanelPositionMemory {
         return intersection.width * intersection.height
     }
 }
-

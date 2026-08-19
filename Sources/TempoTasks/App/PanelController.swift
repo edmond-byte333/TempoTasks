@@ -11,6 +11,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private let panel: FloatingPanel
     private let viewModel: TaskPanelViewModel
     private var positionMemory = PanelPositionMemory()
+    private var isApplyingProgrammaticFrame = false
     private var screenParametersChangedWhileHidden = false
     private var screenParametersObserver: NSObjectProtocol?
 
@@ -92,6 +93,14 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
+    func windowDidMove(_ notification: Notification) {
+        guard !isApplyingProgrammaticFrame else { return }
+        positionMemory.rememberMovedFrame(
+            panel.frame,
+            visibleFrames: NSScreen.screens.map(\.visibleFrame)
+        )
+    }
+
     private func beginUserDrag() {
         positionMemory.beginDrag(at: panel.frame)
     }
@@ -105,19 +114,19 @@ final class PanelController: NSObject, NSWindowDelegate {
         ) else {
             return
         }
-        panel.setFrame(storedFrame, display: true)
+        applyProgrammaticFrame(storedFrame, display: true)
     }
 
     private func preparePositionForPresentation() {
         if !screenParametersChangedWhileHidden,
            let storedFrame = positionMemory.storedFrame {
-            panel.setFrame(storedFrame, display: false)
+            applyProgrammaticFrame(storedFrame, display: false)
             return
         }
 
         let visibleFrames = NSScreen.screens.map(\.visibleFrame)
         if let storedFrame = positionMemory.validStoredFrame(in: visibleFrames) {
-            panel.setFrame(storedFrame, display: false)
+            applyProgrammaticFrame(storedFrame, display: false)
         } else {
             positionOnCurrentScreen()
         }
@@ -142,6 +151,13 @@ final class PanelController: NSObject, NSWindowDelegate {
             panelSize: panel.frame.size,
             in: screen.visibleFrame
         )
-        panel.setFrame(frame, display: false)
+        applyProgrammaticFrame(frame, display: false)
     }
+
+    private func applyProgrammaticFrame(_ frame: NSRect, display: Bool) {
+        isApplyingProgrammaticFrame = true
+        panel.setFrame(frame, display: display)
+        isApplyingProgrammaticFrame = false
+    }
+
 }
