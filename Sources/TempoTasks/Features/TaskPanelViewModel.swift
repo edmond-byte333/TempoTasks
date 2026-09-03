@@ -29,6 +29,10 @@ final class TaskPanelViewModel {
     var undoSnapshot: TaskSnapshot?
     var undoRetryRequired = false
     var hotKeyAvailable = true
+    var hotKeyCombo: HotKeyCombo = .default
+
+    /// 由 AppDelegate 接管：重新注册热键、写入偏好设置、回填 `hotKeyAvailable`。
+    var onHotKeyChange: ((HotKeyCombo) -> Void)?
 
     init(
         repository: TaskRepository,
@@ -57,7 +61,8 @@ final class TaskPanelViewModel {
         switch selection {
         case .today: "今天"
         case .tomorrow: "明天"
-        case .custom(let day): day.formatted(timeZone: timeZoneProvider())
+        case .custom(let day):
+            day.formatted(locale: LocalDay.displayLocale, timeZone: timeZoneProvider())
         }
     }
 
@@ -65,11 +70,19 @@ final class TaskPanelViewModel {
         switch selection {
         case .today: "今天还没有任务"
         case .tomorrow: "明天还没有任务"
-        case .custom(let day): "\(day.formatted(timeZone: timeZoneProvider()))还没有任务"
+        case .custom(let day):
+            "\(day.formatted(locale: LocalDay.displayLocale, timeZone: timeZoneProvider()))还没有任务"
         }
     }
 
     var completedCount: Int { tasks.lazy.filter(\.isCompleted).count }
+
+    /// 与当前组合相同就不重复注册，避免录到同一个键时白白解绑一次。
+    func updateHotKey(_ combo: HotKeyCombo) {
+        guard combo != hotKeyCombo else { return }
+        hotKeyCombo = combo
+        onHotKeyChange?(combo)
+    }
 
     func prepareForPresentation() {
         refreshCalendarContext()

@@ -99,3 +99,9 @@ struct LocalDay: Hashable, Codable, Sendable, Comparable {
         (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day)
     }
 }
+
+extension LocalDay {
+    /// 界面文案全部是中文，日期也固定用中文格式，
+    /// 否则在英文系统上会出现「今天 / Wednesday」这样的中英混排。
+    static let displayLocale = Locale(identifier: "zh_Hans")
+}

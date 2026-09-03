@@ -20,8 +20,9 @@ final class GlobalHotKeyRegistrar {
         }
     }
 
+    /// 注册指定组合。返回 false 表示该组合已被系统或其他应用占用。
     @discardableResult
-    func register() -> Bool {
+    func register(_ combo: HotKeyCombo) -> Bool {
         unregister()
         var reference: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(
@@ -29,8 +30,8 @@ final class GlobalHotKeyRegistrar {
             id: Self.identifier
         )
         let status = RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(controlKey),
+            UInt32(combo.keyCode),
+            combo.carbonModifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,

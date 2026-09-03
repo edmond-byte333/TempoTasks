@@ -4,10 +4,11 @@ import AppKit
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let contextMenu = NSMenu()
-    private let hotKeyStatusItem = NSMenuItem(title: "Control + Space 可用", action: nil, keyEquivalent: "")
+    private let hotKeyStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let onToggle: () -> Void
     private let onOpen: () -> Void
     private(set) var hotKeyAvailable = true
+    private var hotKeyCombo: HotKeyCombo = .default
 
     init(onToggle: @escaping () -> Void, onOpen: @escaping () -> Void) {
         self.onToggle = onToggle
@@ -18,15 +19,17 @@ final class StatusBarController: NSObject {
         configureMenu()
     }
 
-    func setHotKeyAvailable(_ available: Bool) {
+    func setHotKey(_ combo: HotKeyCombo, available: Bool) {
         hotKeyAvailable = available
+        hotKeyCombo = combo
         hotKeyStatusItem.title = available
-            ? "Control + Space 可用"
-            : "Control + Space 不可用"
+            ? "\(combo.displayString) 可用"
+            : "\(combo.displayString) 被占用"
         hotKeyStatusItem.image = NSImage(
             systemSymbolName: available ? "checkmark.circle" : "exclamationmark.triangle",
             accessibilityDescription: nil
         )
+        statusItem.button?.toolTip = "TempoTasks · \(combo.displayString)"
     }
 
     private func configureButton() {
@@ -36,7 +39,7 @@ final class StatusBarController: NSObject {
             accessibilityDescription: "TempoTasks"
         )
         button.image?.isTemplate = true
-        button.toolTip = "TempoTasks · Control + Space"
+        button.toolTip = "TempoTasks · \(hotKeyCombo.displayString)"
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
