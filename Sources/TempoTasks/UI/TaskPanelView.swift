@@ -13,39 +13,30 @@ struct TaskPanelView: View {
     let onDragEnded: (NSRect, NSRect) -> Void
 
     var body: some View {
-        ZStack {
-            TempoTheme.canvas
-            RadialGradient(
-                colors: [TempoTheme.focusBlue.opacity(0.035), .clear],
-                center: .topTrailing,
-                startRadius: 0,
-                endRadius: 420
+        HStack(spacing: 0) {
+            DateRailView(
+                viewModel: viewModel,
+                onDragBegan: onDragBegan,
+                onDragEnded: onDragEnded
             )
+            .frame(width: 168)
 
-            HStack(spacing: 0) {
-                DateRailView(
-                    viewModel: viewModel,
-                    onDragBegan: onDragBegan,
-                    onDragEnded: onDragEnded
-                )
-                .frame(width: 164)
-
-                Rectangle()
-                    .fill(TempoTheme.hairline)
-                    .frame(width: 1)
-
-                VStack(spacing: 0) {
-                    panelHeader
+            // 左右分栏靠背景明度差，不靠 1 pt 分隔线。
+            VStack(spacing: 0) {
+                panelHeader
+                // 已完成是只读归档，输入框在那里没有意义。
+                if viewModel.acceptsNewTasks {
                     QuickAddView(viewModel: viewModel)
-                    TaskListView(viewModel: viewModel)
                 }
+                TaskListView(viewModel: viewModel)
             }
+            .background(TempoTheme.canvas)
         }
         .frame(width: 760, height: 520)
         .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.panel, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: TempoTheme.Radius.panel, style: .continuous)
-                .stroke(TempoTheme.strongBorder, lineWidth: 1)
+                .stroke(TempoTheme.border, lineWidth: 1)
         }
         .environment(\.colorScheme, .dark)
         .onExitCommand(perform: onClose)
@@ -53,74 +44,69 @@ struct TaskPanelView: View {
 
     // MARK: - 头部
 
-    /// 标题位放当前日期本身，而不是每次都一样的疑问句。
-    /// 语气化的提问移到输入框 placeholder，那里才是它起作用的地方。
     private var panelHeader: some View {
-        HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: TempoTheme.Space.xs) {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: TempoTheme.Space.xs + 2) {
                 Text(viewModel.selectedDateLabel)
                     .font(.system(size: TempoTheme.FontSize.display, weight: .semibold))
-                    .foregroundStyle(TempoTheme.primaryText)
+                    .foregroundStyle(TempoTheme.textPrimary)
 
-                // 星期由左栏日期项承担，这里不重复。
-                Text(viewModel.selectedDay.displayDate)
-                    .font(.system(size: TempoTheme.FontSize.caption))
-                    .foregroundStyle(TempoTheme.secondaryText)
+                if !headerSubtitle.isEmpty {
+                    Text(headerSubtitle)
+                        .font(.system(size: TempoTheme.FontSize.caption))
+                        .foregroundStyle(TempoTheme.textSecondary)
+                }
             }
 
-            Spacer()
+            Spacer(minLength: TempoTheme.Space.lg)
 
-            progressSummary
+            // 完成度只对具体某一天有意义。待办里的东西还没被安排，
+            // 归档里的又全是完成的，两处都不该出现进度。
+            if !viewModel.isViewingBacklog, !viewModel.isViewingCompleted {
+                dayProgress
+            }
         }
         .padding(.horizontal, TempoTheme.Space.xl)
         .padding(.top, TempoTheme.Space.xl)
         .padding(.bottom, TempoTheme.Space.lg)
         .overlay {
-            WindowDragSurface(
-                onDragBegan: onDragBegan,
-                onDragEnded: onDragEnded
-            )
+            WindowDragSurface(onDragBegan: onDragBegan, onDragEnded: onDragEnded)
         }
     }
 
-    private var progressSummary: some View {
+    private var headerSubtitle: String {
+        if viewModel.isViewingBacklog {
+            return viewModel.backlogSummary
+        }
+        if viewModel.isViewingCompleted {
+            return viewModel.tasks.isEmpty ? "" : "最近 \(viewModel.tasks.count) 条"
+        }
+        return "\(viewModel.selectedDay.displayDate) · \(viewModel.selectedDay.displayWeekday)"
+    }
+
+    /// 只有具体某天才有「完成度」可言；待办里的东西还没被安排，进度条没有意义。
+    private var dayProgress: some View {
         let total = viewModel.tasks.count
         let done = viewModel.completedCount
-        let ratio = total == 0 ? 0 : CGFloat(done) / CGFloat(total)
 
-        return VStack(alignment: .trailing, spacing: TempoTheme.Space.sm) {
-            HStack(alignment: .firstTextBaseline, spacing: TempoTheme.Space.xs) {
-                Text(done, format: .number)
-                    .font(.system(size: TempoTheme.FontSize.title, weight: .semibold, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(TempoTheme.primaryText)
-                    .contentTransition(.numericText())
+        return HStack(alignment: .firstTextBaseline, spacing: TempoTheme.Space.xs + 2) {
+            Text(done, format: .number)
+                .font(.system(size: TempoTheme.FontSize.title, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(done > 0 ? TempoTheme.textPrimary : TempoTheme.textSecondary)
+                .contentTransition(.numericText())
 
-                Text("/ \(total)")
-                    .font(.system(size: TempoTheme.FontSize.caption, design: .monospaced))
-                    .monospacedDigit()
-                    .foregroundStyle(TempoTheme.secondaryText)
-
-                Text("已完成")
-                    .font(.system(size: TempoTheme.FontSize.caption))
-                    .foregroundStyle(TempoTheme.secondaryText)
-                    .padding(.leading, TempoTheme.Space.xs)
-            }
-
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.08))
-                Capsule()
-                    .fill(TempoTheme.completionCoral)
-                    .frame(width: 84 * ratio)
-            }
-            .frame(width: 84, height: 3)
+            Text("/ \(total) 完成")
+                .font(.system(size: TempoTheme.FontSize.caption))
+                .foregroundStyle(TempoTheme.textSecondary)
+                .monospacedDigit()
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("共 \(total) 个任务，已完成 \(done) 个")
     }
 }
 
-// MARK: - 左侧日期轨道
+// MARK: - 左侧轨道
 
 private struct DateRailView: View {
     @Bindable var viewModel: TaskPanelViewModel
@@ -130,6 +116,9 @@ private struct DateRailView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             brandMark
+
+            backlogButton
+                .padding(.bottom, TempoTheme.Space.lg)
 
             TempoSectionLabel(text: "日程")
                 .padding(.horizontal, TempoTheme.Space.lg)
@@ -141,50 +130,93 @@ private struct DateRailView: View {
 
             Spacer(minLength: TempoTheme.Space.lg)
 
+            completedButton
+                .padding(.bottom, TempoTheme.Space.lg)
+
             shortcutHints
         }
-        .background(TempoTheme.surface.opacity(0.78))
+        .background(TempoTheme.surface)
     }
 
-    /// 品牌标记走中性色：珊瑚红的职责是完成与错误，不做装饰。
     private var brandMark: some View {
         HStack(spacing: TempoTheme.Space.sm) {
-            RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
-                .fill(TempoTheme.raised)
-                .frame(width: 22, height: 22)
-                .overlay {
-                    RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
-                        .stroke(TempoTheme.strongBorder, lineWidth: 1)
-                }
-                .overlay {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: TempoTheme.FontSize.caption, weight: .bold))
-                        .foregroundStyle(TempoTheme.primaryText)
-                }
+            Image(systemName: "checkmark.square")
+                .font(.system(size: TempoTheme.FontSize.body, weight: .medium))
+                .foregroundStyle(TempoTheme.textSecondary)
 
             Text("Tempo")
                 .font(.system(size: TempoTheme.FontSize.body, weight: .semibold))
-                .foregroundStyle(TempoTheme.primaryText)
+                .foregroundStyle(TempoTheme.textPrimary)
         }
         .padding(.horizontal, TempoTheme.Space.lg)
         .padding(.top, TempoTheme.Space.xl)
         .padding(.bottom, TempoTheme.Space.xl)
         .overlay {
-            WindowDragSurface(
-                onDragBegan: onDragBegan,
-                onDragEnded: onDragEnded
-            )
+            WindowDragSurface(onDragBegan: onDragBegan, onDragEnded: onDragEnded)
         }
     }
 
-    /// 底部原本是与头部重复的进度条，换成快捷键说明，并让唤出键可以就地改。
+    /// 默认落点：唤出即可打字，不必先决定日期。
+    private var backlogButton: some View {
+        let isSelected = viewModel.selection == .backlog
+        return Button {
+            viewModel.select(.backlog)
+        } label: {
+            BacklogButtonLabel(count: viewModel.backlogCount, isSelected: isSelected)
+        }
+        .buttonStyle(TempoPressableButtonStyle())
+        .accessibilityLabel("待办，\(viewModel.backlogCount) 件")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .padding(.horizontal, TempoTheme.Space.sm)
+    }
+
+    /// 归档入口。放在日程下面、靠近底部，它是偶尔回看的东西，不该和主流程抢位置。
+    private var completedButton: some View {
+        let isSelected = viewModel.selection == .completed
+        return Button {
+            viewModel.select(.completed)
+        } label: {
+            HStack(spacing: TempoTheme.Space.sm) {
+                Image(systemName: "checkmark.circle")
+                    .font(.system(size: TempoTheme.FontSize.label))
+                    .frame(width: 20)
+                Text("已完成")
+                    .font(.system(size: TempoTheme.FontSize.label, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(isSelected ? TempoTheme.textPrimary : TempoTheme.textDim)
+            .padding(.horizontal, TempoTheme.Space.md)
+            .frame(height: 36)
+            .background {
+                RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
+                    .fill(isSelected ? TempoTheme.accentSurface : .clear)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
+        }
+        .buttonStyle(TempoPressableButtonStyle())
+        .accessibilityLabel("已完成的任务记录")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .padding(.horizontal, TempoTheme.Space.sm)
+    }
+
     private var shortcutHints: some View {
         VStack(alignment: .leading, spacing: TempoTheme.Space.sm) {
             HStack(spacing: TempoTheme.Space.sm) {
                 TempoSectionLabel(text: "快捷键")
                 Spacer(minLength: 0)
                 if viewModel.hotKeyCombo != .default {
-                    resetHotKeyButton
+                    Button {
+                        viewModel.updateHotKey(.default)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: TempoTheme.FontSize.micro, weight: .semibold))
+                            .foregroundStyle(TempoTheme.textSecondary)
+                            .frame(width: TempoTheme.Space.lg, height: TempoTheme.Space.lg)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(TempoPressableButtonStyle())
+                    .help("恢复默认快捷键 \(HotKeyCombo.default.displayString)")
+                    .accessibilityLabel("恢复默认快捷键")
                 }
             }
 
@@ -194,36 +226,17 @@ private struct DateRailView: View {
                 onChange: viewModel.updateHotKey
             )
 
-            hintRow(key: "esc", label: "关闭面板")
+            HStack(spacing: TempoTheme.Space.sm) {
+                TempoKeyCap(text: "esc")
+                Text("关闭面板")
+                    .font(.system(size: TempoTheme.FontSize.micro))
+                    .foregroundStyle(TempoTheme.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("关闭面板，快捷键 esc")
         }
         .padding(.horizontal, TempoTheme.Space.lg)
         .padding(.bottom, TempoTheme.Space.lg)
-    }
-
-    private var resetHotKeyButton: some View {
-        Button {
-            viewModel.updateHotKey(.default)
-        } label: {
-            Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: TempoTheme.FontSize.micro, weight: .semibold))
-                .foregroundStyle(TempoTheme.secondaryText)
-                .frame(width: TempoTheme.Space.lg, height: TempoTheme.Space.lg)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(TempoPressableButtonStyle())
-        .help("恢复默认快捷键 \(HotKeyCombo.default.displayString)")
-        .accessibilityLabel("恢复默认快捷键")
-    }
-
-    private func hintRow(key: String, label: String) -> some View {
-        HStack(spacing: TempoTheme.Space.sm) {
-            TempoKeyCap(text: key)
-            Text(label)
-                .font(.system(size: TempoTheme.FontSize.micro))
-                .foregroundStyle(TempoTheme.secondaryText)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label)，快捷键 \(key)")
     }
 
     private func dateButton(
@@ -241,7 +254,7 @@ private struct DateRailView: View {
         .accessibilityLabel("\(title)，\(day.displayDate)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .padding(.horizontal, TempoTheme.Space.sm)
-        .padding(.bottom, TempoTheme.Space.sm)
+        .padding(.bottom, TempoTheme.Space.xs)
     }
 
     private var customDateButton: some View {
@@ -280,7 +293,59 @@ private struct DateRailView: View {
     }
 }
 
-// MARK: - 日期项
+// MARK: - 左栏条目
+
+private struct BacklogButtonLabel: View {
+    let count: Int
+    let isSelected: Bool
+
+    @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: TempoTheme.Space.sm) {
+            Image(systemName: "tray.full")
+                .font(.system(size: TempoTheme.FontSize.label))
+                .frame(width: 20)
+
+            Text("待办")
+                .font(.system(size: TempoTheme.FontSize.title, weight: .semibold))
+
+            Spacer(minLength: 0)
+
+            if count > 0 {
+                Text("\(count)")
+                    .font(.system(size: TempoTheme.FontSize.micro, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? TempoTheme.canvas : TempoTheme.textPrimary)
+                    .padding(.horizontal, TempoTheme.Space.xs + 1)
+                    .frame(minWidth: 18, minHeight: 18)
+                    .background(isSelected ? TempoTheme.accent : TempoTheme.raised)
+                    .clipShape(Capsule())
+            }
+        }
+        .foregroundStyle(foreground)
+        .padding(.horizontal, TempoTheme.Space.md)
+        .frame(height: 44)
+        .background {
+            RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
+                .fill(background)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
+        .onHover { isHovering = $0 }
+        .animation(reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick), value: isHovering)
+    }
+
+    private var foreground: Color {
+        if isSelected { return TempoTheme.textUrgent }
+        return isHovering ? TempoTheme.textPrimary : TempoTheme.textSecondary
+    }
+
+    private var background: Color {
+        if isSelected { return TempoTheme.accentSurface }
+        return isHovering ? TempoTheme.rowHover : .clear
+    }
+}
 
 private struct DateButtonLabel: View {
     let day: LocalDay
@@ -293,83 +358,59 @@ private struct DateButtonLabel: View {
     var body: some View {
         HStack(spacing: TempoTheme.Space.sm) {
             Text(day.day, format: .number)
-                .font(.system(size: TempoTheme.FontSize.dayNumber, weight: .semibold, design: .monospaced))
+                .font(.system(size: TempoTheme.FontSize.dayNumber, weight: .medium, design: .monospaced))
                 .monospacedDigit()
-                .frame(width: TempoTheme.Space.xxl)
+                .frame(width: 20, alignment: .center)
+                .foregroundStyle(isSelected ? TempoTheme.accent : TempoTheme.textSecondary)
 
-            VStack(alignment: .leading, spacing: TempoTheme.Space.xs) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: TempoTheme.FontSize.label, weight: .semibold))
+                    .font(.system(size: TempoTheme.FontSize.label, weight: .medium))
                     .lineLimit(1)
                 Text(day.displayWeekday)
                     .font(.system(size: TempoTheme.FontSize.micro))
-                    .foregroundStyle(
-                        isSelected ? TempoTheme.focusBlue.opacity(0.78) : TempoTheme.secondaryText
-                    )
+                    .foregroundStyle(TempoTheme.textDim)
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(isSelected || isHovering ? TempoTheme.primaryText : TempoTheme.secondaryText)
-        .padding(.horizontal, TempoTheme.Space.sm)
-        .frame(height: 56)
+        .foregroundStyle(isSelected ? TempoTheme.textPrimary : TempoTheme.textSecondary)
+        .padding(.horizontal, TempoTheme.Space.md)
+        .frame(height: 44)
         .background {
             RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
-                .fill(backgroundFill)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
-                .stroke(borderColor, lineWidth: 1)
+                .fill(isSelected ? TempoTheme.accentSurface : (isHovering ? TempoTheme.rowHover : .clear))
         }
         .contentShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
         .onHover { isHovering = $0 }
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-            value: isHovering
-        )
-    }
-
-    private var backgroundFill: Color {
-        if isSelected { return TempoTheme.focusBlue.opacity(0.13) }
-        if isHovering { return Color.white.opacity(0.04) }
-        return .clear
-    }
-
-    private var borderColor: Color {
-        if isSelected { return TempoTheme.focusBlue.opacity(0.32) }
-        if isHovering { return TempoTheme.hairline }
-        return .clear
+        .animation(reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick), value: isHovering)
     }
 }
 
 private struct EmptyDateButtonLabel: View {
     @State private var isHovering = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: TempoTheme.Space.sm) {
             Image(systemName: "calendar")
-                .frame(width: TempoTheme.Space.xxl)
+                .font(.system(size: TempoTheme.FontSize.label))
+                .frame(width: 20)
             Text("选择日期")
+                .font(.system(size: TempoTheme.FontSize.label, weight: .medium))
             Spacer(minLength: 0)
         }
-        .font(.system(size: TempoTheme.FontSize.label, weight: .medium))
-        .foregroundStyle(isHovering ? TempoTheme.primaryText : TempoTheme.secondaryText)
-        .padding(.horizontal, TempoTheme.Space.sm)
-        .frame(height: 56)
+        .foregroundStyle(isHovering ? TempoTheme.textPrimary : TempoTheme.textSecondary)
+        .padding(.horizontal, TempoTheme.Space.md)
+        .frame(height: 44)
         .background {
             RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
-                .fill(isHovering ? Color.white.opacity(0.04) : .clear)
+                .fill(isHovering ? TempoTheme.rowHover : .clear)
         }
         .contentShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
         .onHover { isHovering = $0 }
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-            value: isHovering
-        )
     }
 }
 
-// MARK: - 快速添加
+// MARK: - 快速输入
 
 private struct QuickAddView: View {
     @Bindable var viewModel: TaskPanelViewModel
@@ -379,97 +420,58 @@ private struct QuickAddView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: TempoTheme.Space.sm) {
             HStack(spacing: TempoTheme.Space.md) {
-                leadingGlyph
-
                 TextField(placeholder, text: $viewModel.draft)
                     .textFieldStyle(.plain)
-                    .font(.system(size: TempoTheme.FontSize.body, weight: .medium))
-                    .foregroundStyle(TempoTheme.primaryText)
+                    .font(.system(size: TempoTheme.FontSize.title))
+                    .foregroundStyle(TempoTheme.textUrgent)
                     .focused($isFocused)
                     .onSubmit(viewModel.submitDraft)
                     .onChange(of: viewModel.draft) { _, _ in viewModel.draftDidChange() }
                     .accessibilityLabel("添加任务")
 
-                submitButton
+                if !viewModel.draft.isEmpty {
+                    TempoKeyCap(text: "↩")
+                        .transition(.opacity)
+                }
             }
             .padding(.horizontal, TempoTheme.Space.lg)
-            .frame(height: 62)
-            .background(TempoTheme.raised.opacity(0.72))
+            .frame(height: 52)
+            .background(isFocused ? TempoTheme.raised : TempoTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.control, style: .continuous))
-            // DESIGN.md 第 4 节：聚焦时 1 pt 蓝边 + 3 pt 低透明蓝环，不用外发光。
             .overlay {
                 RoundedRectangle(cornerRadius: TempoTheme.Radius.control, style: .continuous)
-                    .stroke(isFocused ? TempoTheme.focusBlue : TempoTheme.strongBorder, lineWidth: 1)
+                    .stroke(isFocused ? TempoTheme.accent : TempoTheme.hairline, lineWidth: 1)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: TempoTheme.Radius.control + 3, style: .continuous)
-                    .stroke(TempoTheme.focusBlue.opacity(isFocused ? 0.22 : 0), lineWidth: 3)
+                    .stroke(TempoTheme.accentMuted.opacity(isFocused ? 1 : 0), lineWidth: 2)
                     .padding(-3)
             }
-            .shadow(color: .black.opacity(0.24), radius: 14, y: 8)
-            .animation(
-                reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-                value: isFocused
-            )
+            .animation(reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick), value: isFocused)
 
             if let error = viewModel.inputError {
                 Text(error)
                     .font(.system(size: TempoTheme.FontSize.caption))
-                    .foregroundStyle(TempoTheme.completionCoral)
+                    .foregroundStyle(TempoTheme.alert)
                     .accessibilityLabel("输入错误：\(error)")
             }
         }
         .padding(.horizontal, TempoTheme.Space.xl)
-        .padding(.bottom, TempoTheme.Space.lg)
+        .padding(.bottom, TempoTheme.Space.xl)
         .onReceive(NotificationCenter.default.publisher(for: .tempoFocusInput)) { _ in
             isFocused = true
         }
     }
 
-    /// 语气化的提问放在这里，随所选日期变化，比固定标题更有用。
     private var placeholder: String {
         switch viewModel.selection {
-        case .today: "今天要完成什么？回车保存"
-        case .tomorrow: "明天准备做什么？回车保存"
-        case .custom: "这一天要完成什么？回车保存"
+        case .backlog: "记下来，之后再决定哪天做"
+        case .today: "今天要完成什么？"
+        case .tomorrow: "明天准备做什么？"
+        case .custom: "这一天要完成什么？"
+        // 已完成视图不显示输入框，这里只是让 switch 穷尽。
+        case .completed: ""
         }
-    }
-
-    /// 加号是中性动作，不占用珊瑚红；聚焦时才升到焦点蓝。
-    private var leadingGlyph: some View {
-        RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
-            .fill(isFocused ? TempoTheme.focusBlue.opacity(0.16) : TempoTheme.raisedHover)
-            .frame(width: 28, height: 28)
-            .overlay {
-                Image(systemName: "plus")
-                    .font(.system(size: TempoTheme.FontSize.label, weight: .semibold))
-                    .foregroundStyle(isFocused ? TempoTheme.focusBlue : TempoTheme.secondaryText)
-            }
-    }
-
-    private var submitButton: some View {
-        let isEnabled = !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-        return Button(action: viewModel.submitDraft) {
-            HStack(spacing: TempoTheme.Space.xs + 2) {
-                Text("添加")
-                Text("↵")
-                    .font(.system(size: TempoTheme.FontSize.micro, weight: .semibold, design: .monospaced))
-            }
-            .font(.system(size: TempoTheme.FontSize.caption, weight: .semibold))
-            .foregroundStyle(isEnabled ? .white : TempoTheme.completedText)
-            .padding(.horizontal, TempoTheme.Space.md)
-            .frame(height: 30)
-            .background(isEnabled ? TempoTheme.focusBlue.opacity(0.72) : TempoTheme.raisedHover)
-            .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous))
-        }
-        .buttonStyle(TempoPressableButtonStyle())
-        .disabled(!isEnabled)
-        .accessibilityLabel("添加任务")
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-            value: isEnabled
-        )
     }
 }
 
@@ -481,26 +483,20 @@ private struct TaskListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: TempoTheme.Space.md) {
-                TempoSectionLabel(text: "任务队列")
-                Rectangle().fill(TempoTheme.hairline).frame(height: 1)
-            }
-            .padding(.horizontal, TempoTheme.Space.xl)
-            .padding(.bottom, TempoTheme.Space.sm)
-
             Group {
                 if !viewModel.tasks.isEmpty {
                     ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(viewModel.tasks, id: \.id) { task in
-                                TaskRowView(
-                                    task: task,
-                                    onToggle: { viewModel.toggleCompletion(task) },
-                                    onDelete: { viewModel.delete(task) }
-                                )
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            if viewModel.isViewingBacklog {
+                                backlogGroups
+                            } else {
+                                ForEach(viewModel.tasks, id: \.id) { task in
+                                    row(for: task)
+                                }
                             }
                         }
                         .padding(.horizontal, TempoTheme.Space.md)
+                        .padding(.bottom, TempoTheme.Space.lg)
                     }
                     .scrollIndicators(.hidden)
                 } else if viewModel.loadError == nil {
@@ -522,22 +518,84 @@ private struct TaskListView: View {
                         value: viewModel.undoSnapshot != nil
                     )
             }
+
+            if let batch = viewModel.bulkCompleted {
+                bulkUndoBanner(count: batch.count)
+                    .transition(.opacity)
+                    .animation(
+                        reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.standard),
+                        value: batch.count
+                    )
+            }
         }
     }
 
-    private var emptyState: some View {
-        VStack(spacing: TempoTheme.Space.md) {
-            Image(systemName: "checkmark.circle")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(TempoTheme.completedText)
-            Text(viewModel.emptyStateMessage)
-                .font(.system(size: TempoTheme.FontSize.body, weight: .medium))
-                .foregroundStyle(TempoTheme.primaryText)
-            Text("在上方输入，按回车保存")
-                .font(.system(size: TempoTheme.FontSize.caption))
-                .foregroundStyle(TempoTheme.secondaryText)
+    /// 几十条的量级需要分组，否则逾期和未安排会糊成一片。
+    @ViewBuilder
+    private var backlogGroups: some View {
+        let overdue = viewModel.tasks.filter { !$0.isUnscheduled }
+        let unscheduled = viewModel.tasks.filter(\.isUnscheduled)
+
+        // 新记下的落在「还没安排」，放最前面，回车后不用滚动就能看到。
+        if !unscheduled.isEmpty {
+            groupHeader("还没安排", count: unscheduled.count)
+            ForEach(unscheduled, id: \.id) { row(for: $0) }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        if !overdue.isEmpty {
+            groupHeader("待处理", count: overdue.count) {
+                viewModel.completeAll(overdue)
+            }
+            .padding(.top, unscheduled.isEmpty ? 0 : TempoTheme.Space.xl)
+            ForEach(overdue, id: \.id) { row(for: $0) }
+        }
+    }
+
+    /// 传入 onCompleteAll 时，标题行右侧出现整组完成的入口。
+    private func groupHeader(
+        _ title: String,
+        count: Int,
+        onCompleteAll: (() -> Void)? = nil
+    ) -> some View {
+        HStack(spacing: TempoTheme.Space.sm) {
+            TempoSectionLabel(text: title)
+            Text("\(count)")
+                .font(.system(size: TempoTheme.FontSize.micro, design: .monospaced))
+                .monospacedDigit()
+                .foregroundStyle(TempoTheme.textDim)
+            Spacer(minLength: 0)
+            if let onCompleteAll {
+                GroupCompleteButton(count: count, action: onCompleteAll)
+            }
+        }
+        .padding(.horizontal, TempoTheme.Space.md)
+        .padding(.bottom, TempoTheme.Space.sm)
+    }
+
+    private func row(for task: TaskItem) -> some View {
+        TaskRowView(
+            task: task,
+            today: viewModel.today,
+            isArchiveView: viewModel.isViewingCompleted,
+            onToggle: { viewModel.toggleCompletion(task) },
+            onDelete: { viewModel.delete(task) },
+            onSchedule: { viewModel.schedule(task, to: $0) }
+        )
+    }
+
+    /// 靠上放，紧跟输入框。垂直居中会让它漂在面板下半部，
+    /// 离刚刚打完字的地方太远。
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: TempoTheme.Space.sm) {
+            Text(viewModel.emptyStateMessage)
+                .font(.system(size: TempoTheme.FontSize.title, weight: .medium))
+                .foregroundStyle(TempoTheme.textSecondary)
+            Text("在上方输入，回车保存")
+                .font(.system(size: TempoTheme.FontSize.caption))
+                .foregroundStyle(TempoTheme.textDim)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, TempoTheme.Space.xl)
         .accessibilityElement(children: .combine)
     }
 
@@ -545,48 +603,57 @@ private struct TaskListView: View {
         HStack(spacing: TempoTheme.Space.md) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: TempoTheme.FontSize.caption))
-                .foregroundStyle(TempoTheme.completionCoral)
+                .foregroundStyle(TempoTheme.alert)
             Text(message)
                 .font(.system(size: TempoTheme.FontSize.caption))
-                .foregroundStyle(TempoTheme.primaryText)
+                .foregroundStyle(TempoTheme.textPrimary)
             Spacer()
             Button(viewModel.undoRetryRequired ? "重试撤销" : "重试", action: viewModel.retryLoad)
                 .buttonStyle(TempoPressableButtonStyle())
                 .font(.system(size: TempoTheme.FontSize.caption, weight: .semibold))
-                .foregroundStyle(TempoTheme.focusBlue)
+                .foregroundStyle(TempoTheme.accent)
         }
         .padding(.horizontal, TempoTheme.Space.lg)
-        .frame(height: 38)
-        .background(TempoTheme.completionCoral.opacity(0.09))
-        .overlay(alignment: .top) {
-            Rectangle().fill(TempoTheme.completionCoral.opacity(0.22)).frame(height: 1)
-        }
+        .frame(height: 40)
+        .background(TempoTheme.alertSurface)
     }
 
-    /// DESIGN.md 第 4 节：撤销提示是 10 pt 圆角的 raised 浮层，不是通栏条。
-    private var undoBanner: some View {
+    private func bulkUndoBanner(count: Int) -> some View {
         HStack(spacing: TempoTheme.Space.md) {
-            Image(systemName: "trash")
+            Text("已完成 \(count) 件")
                 .font(.system(size: TempoTheme.FontSize.caption))
-                .foregroundStyle(TempoTheme.secondaryText)
-            Text("已删除任务")
-                .font(.system(size: TempoTheme.FontSize.caption, weight: .medium))
-                .foregroundStyle(TempoTheme.primaryText)
+                .foregroundStyle(TempoTheme.textSecondary)
+                .monospacedDigit()
             Spacer()
-            Button(viewModel.undoRetryRequired ? "重试撤销" : "撤销", action: viewModel.undoDelete)
+            Button("撤销", action: viewModel.undoBulkComplete)
                 .buttonStyle(TempoPressableButtonStyle())
                 .font(.system(size: TempoTheme.FontSize.caption, weight: .semibold))
-                .foregroundStyle(TempoTheme.focusBlue)
+                .foregroundStyle(TempoTheme.accent)
         }
         .padding(.horizontal, TempoTheme.Space.lg)
         .frame(height: 40)
         .background(TempoTheme.raised)
         .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous)
-                .stroke(TempoTheme.strongBorder, lineWidth: 1)
+        .padding(.horizontal, TempoTheme.Space.xl)
+        .padding(.bottom, TempoTheme.Space.lg)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var undoBanner: some View {
+        HStack(spacing: TempoTheme.Space.md) {
+            Text("已删除")
+                .font(.system(size: TempoTheme.FontSize.caption))
+                .foregroundStyle(TempoTheme.textSecondary)
+            Spacer()
+            Button(viewModel.undoRetryRequired ? "重试撤销" : "撤销", action: viewModel.undoDelete)
+                .buttonStyle(TempoPressableButtonStyle())
+                .font(.system(size: TempoTheme.FontSize.caption, weight: .semibold))
+                .foregroundStyle(TempoTheme.accent)
         }
-        .shadow(color: .black.opacity(0.32), radius: 12, y: 6)
+        .padding(.horizontal, TempoTheme.Space.lg)
+        .frame(height: 40)
+        .background(TempoTheme.raised)
+        .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.row, style: .continuous))
         .padding(.horizontal, TempoTheme.Space.xl)
         .padding(.bottom, TempoTheme.Space.lg)
         .accessibilityElement(children: .contain)
@@ -595,91 +662,197 @@ private struct TaskListView: View {
 
 // MARK: - 任务行
 
-private struct TaskRowView: View {
-    let task: TaskItem
-    let onToggle: () -> Void
-    let onDelete: () -> Void
+/// 整组标记完成。默认低调，悬停才显出来，避免误点。
+private struct GroupCompleteButton: View {
+    let count: Int
+    let action: () -> Void
 
     @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text("全部完成")
+                .font(.system(size: TempoTheme.FontSize.micro, weight: .medium))
+                .foregroundStyle(isHovering ? TempoTheme.textPrimary : TempoTheme.textDim)
+                .padding(.horizontal, TempoTheme.Space.sm)
+                .frame(height: 20)
+                .background(isHovering ? TempoTheme.raised : .clear)
+                .clipShape(Capsule())
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(TempoPressableButtonStyle())
+        .onHover { isHovering = $0 }
+        .help("把这 \(count) 件全部标记完成，5 秒内可撤销")
+        .accessibilityLabel("全部完成，共 \(count) 件")
+    }
+}
+
+private struct TaskRowView: View {
+    let task: TaskItem
+    let today: LocalDay
+    /// 归档视图：显示完成日期，不提供改日期入口。
+    let isArchiveView: Bool
+    let onToggle: () -> Void
+    let onDelete: () -> Void
+    let onSchedule: (LocalDay?) -> Void
+
+    @State private var isHovering = false
+    @State private var isPickingDate = false
+    @State private var pickedDate = Date()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var daysOverdue: Int {
+        guard !task.isUnscheduled, !task.isCompleted else { return 0 }
+        return max(0, task.localDay.daysBefore(today))
+    }
 
     var body: some View {
         HStack(spacing: TempoTheme.Space.md) {
             checkbox
 
-            // 原本的副标题「任务」每行都一样，右侧日期 chip 与左栏所选日期重复，两处都去掉。
             Text(task.title)
-                .font(.system(size: TempoTheme.FontSize.body, weight: .medium))
-                .foregroundStyle(task.isCompleted ? TempoTheme.completedText : TempoTheme.primaryText)
-                .strikethrough(task.isCompleted, color: TempoTheme.completedText)
-                .lineLimit(3)
+                .font(.system(size: TempoTheme.FontSize.body, weight: titleWeight))
+                .foregroundStyle(titleColor)
+                .strikethrough(task.isCompleted, color: TempoTheme.textDim)
+                .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            deleteButton
+            if isArchiveView, let completedAt = task.completedAt {
+                completionMark(completedAt)
+            } else if daysOverdue > 0 {
+                overdueMark
+            }
+
+            // 日期选择器打开时鼠标会移到 popover 上，行的 hover 随之失效。
+            // 不带上 isPickingDate 的话，actions 会连同 popover 一起被销毁。
+            if isHovering || isPickingDate {
+                actions
+                    .transition(.opacity)
+            }
         }
         .padding(.horizontal, TempoTheme.Space.md)
         .padding(.vertical, TempoTheme.Space.md)
         .background {
             RoundedRectangle(cornerRadius: TempoTheme.Radius.control, style: .continuous)
-                .fill(isHovering ? Color.white.opacity(0.03) : .clear)
-        }
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(TempoTheme.hairline)
-                .frame(height: 1)
-                .padding(.horizontal, TempoTheme.Space.md)
+                .fill(isHovering || isPickingDate ? TempoTheme.rowHover : .clear)
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-            value: isHovering
-        )
+        .animation(reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick), value: isHovering)
     }
 
+    /// 亮度即优先级：欠得越久越亮。这是整套设计的主线。
+    private var titleColor: Color {
+        if task.isCompleted { return TempoTheme.textDim }
+        if task.isUnscheduled { return TempoTheme.textSecondary }
+        return TempoTheme.urgencyText(daysOverdue: daysOverdue)
+    }
+
+    private var titleWeight: Font.Weight {
+        daysOverdue >= 7 ? .medium : .regular
+    }
+
+    /// 完成态不再用珊瑚红。完成的事应该退场，不该是画面里最重的颜色。
     private var checkbox: some View {
         Button(action: onToggle) {
             RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
-                .fill(task.isCompleted ? TempoTheme.completionCoral : TempoTheme.canvas)
+                .fill(task.isCompleted ? TempoTheme.textDim : TempoTheme.canvas)
                 .frame(width: 18, height: 18)
                 .overlay {
                     RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
-                        .stroke(checkboxBorder, lineWidth: 1)
+                        .stroke(task.isCompleted ? TempoTheme.textDim : TempoTheme.border, lineWidth: 1)
                 }
                 .overlay {
                     Image(systemName: "checkmark")
                         .font(.system(size: TempoTheme.FontSize.micro, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(TempoTheme.canvas)
                         .opacity(task.isCompleted ? 1 : 0)
                 }
         }
         .buttonStyle(TempoPressableButtonStyle())
         .accessibilityLabel(task.isCompleted ? "标记为未完成" : "标记为已完成")
-        // DESIGN.md 第 9 节：只做颜色与透明度反馈，不位移。
-        .animation(
-            reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick),
-            value: task.isCompleted
-        )
+        .animation(reduceMotion ? nil : .easeOut(duration: TempoTheme.Motion.quick), value: task.isCompleted)
     }
 
-    private var checkboxBorder: Color {
-        if task.isCompleted { return TempoTheme.completionCoral }
-        return isHovering ? Color.white.opacity(0.38) : Color.white.opacity(0.23)
+    /// 显示原定日期而不是相对天数：具体日期能带回当时的上下文。
+    /// 紧迫感由标题亮度承担，这里不必重复表达。
+    /// 纯数字，用等宽让多行之间竖向对齐。
+    private var overdueMark: some View {
+        Text(String(format: "%02d/%02d", task.localDay.month, task.localDay.day))
+            .font(.system(size: TempoTheme.FontSize.micro, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(TempoTheme.urgencyAccent(daysOverdue: daysOverdue) ?? TempoTheme.textDim)
+            .accessibilityLabel("原定 \(task.localDay.month) 月 \(task.localDay.day) 日，已逾期 \(daysOverdue) 天")
     }
 
-    /// DESIGN.md 第 4 节：删除按钮悬停任务行时才显现。
-    private var deleteButton: some View {
-        Button(action: onDelete) {
-            Image(systemName: "trash")
-                .font(.system(size: TempoTheme.FontSize.caption, weight: .medium))
-                .frame(width: 26, height: 26)
-                .contentShape(Rectangle())
+    /// 归档里显示完成日期，回答的是「这是什么时候做完的」。
+    private func completionMark(_ completedAt: Date) -> some View {
+        let day = LocalDay(date: completedAt)
+        return Text(String(format: "%02d/%02d", day.month, day.day))
+            .font(.system(size: TempoTheme.FontSize.micro, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(TempoTheme.textDim)
+            .accessibilityLabel("完成于 \(day.month) 月 \(day.day) 日")
+    }
+
+    private var actions: some View {
+        HStack(spacing: TempoTheme.Space.xs) {
+            // 归档里改日期没有意义，只保留删除。
+            if !isArchiveView {
+                scheduleMenu
+            }
+
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: TempoTheme.FontSize.caption, weight: .medium))
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(TempoPressableButtonStyle())
+            .foregroundStyle(TempoTheme.textSecondary)
+            .accessibilityLabel("删除任务：\(task.title)")
         }
-        .buttonStyle(TempoPressableButtonStyle())
-        .foregroundStyle(TempoTheme.completionCoral)
-        .opacity(isHovering ? 1 : 0)
-        .allowsHitTesting(isHovering)
-        .accessibilityLabel("删除任务：\(task.title)")
-        .accessibilityHidden(false)
+    }
+
+    private var scheduleMenu: some View {
+        Menu {
+            Button("今天") { onSchedule(today) }
+            Button("明天") { onSchedule(today.addingDays(1)) }
+            Button("选择日期…") {
+                pickedDate = task.localDay.date() ?? Date()
+                isPickingDate = true
+            }
+            if !task.isUnscheduled {
+                Divider()
+                Button("移回待办") { onSchedule(nil) }
+            }
+        } label: {
+            Image(systemName: "calendar")
+                .font(.system(size: TempoTheme.FontSize.caption, weight: .medium))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .frame(width: 26, height: 26)
+        .foregroundStyle(TempoTheme.textSecondary)
+        .help("改到别的日期")
+        .accessibilityLabel("安排日期：\(task.title)")
+        .popover(isPresented: $isPickingDate, arrowEdge: .bottom) {
+            DatePicker(
+                "安排到",
+                selection: Binding(
+                    get: { pickedDate },
+                    set: { newValue in
+                        pickedDate = newValue
+                        onSchedule(LocalDay(date: newValue))
+                        isPickingDate = false
+                    }
+                ),
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+            .padding(TempoTheme.Space.md)
+            .frame(width: 280)
+        }
     }
 }

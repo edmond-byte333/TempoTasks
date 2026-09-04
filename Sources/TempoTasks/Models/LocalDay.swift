@@ -98,6 +98,19 @@ struct LocalDay: Hashable, Codable, Sendable, Comparable {
     static func < (lhs: LocalDay, rhs: LocalDay) -> Bool {
         (lhs.year, lhs.month, lhs.day) < (rhs.year, rhs.month, rhs.day)
     }
+
+    /// self 比 `other` 早多少天。晚于 `other` 时返回负数。
+    /// 用来把「欠了多久」换算成界面上的亮度层级。
+    func daysBefore(_ other: LocalDay, timeZone: TimeZone = .autoupdatingCurrent) -> Int {
+        guard let start = date(timeZone: timeZone),
+              let end = other.date(timeZone: timeZone)
+        else {
+            return 0
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        return calendar.dateComponents([.day], from: start, to: end).day ?? 0
+    }
 }
 
 extension LocalDay {

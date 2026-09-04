@@ -22,7 +22,7 @@ struct HotKeyRecorderView: View {
                     keyCapContent
                     Text(isRecording ? "按下新组合" : "唤出 / 隐藏")
                         .font(.system(size: TempoTheme.FontSize.micro))
-                        .foregroundStyle(TempoTheme.secondaryText)
+                        .foregroundStyle(TempoTheme.textSecondary)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -54,7 +54,7 @@ struct HotKeyRecorderView: View {
             .foregroundStyle(keyCapForeground)
             .padding(.horizontal, TempoTheme.Space.xs + 1)
             .frame(minWidth: 52, minHeight: TempoTheme.Space.lg)
-            .background(isRecording ? TempoTheme.focusBlue.opacity(0.16) : TempoTheme.raised)
+            .background(isRecording ? TempoTheme.accent.opacity(0.16) : TempoTheme.raised)
             .clipShape(RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: TempoTheme.Radius.sm, style: .continuous)
@@ -63,19 +63,19 @@ struct HotKeyRecorderView: View {
     }
 
     private var keyCapForeground: Color {
-        if isRecording { return TempoTheme.focusBlue }
-        return isConflicting ? TempoTheme.completionCoral : TempoTheme.secondaryText
+        if isRecording { return TempoTheme.accent }
+        return isConflicting ? TempoTheme.alert : TempoTheme.textSecondary
     }
 
     private var keyCapBorder: Color {
-        if isRecording { return TempoTheme.focusBlue.opacity(0.6) }
-        return isConflicting ? TempoTheme.completionCoral.opacity(0.5) : TempoTheme.hairline
+        if isRecording { return TempoTheme.accent.opacity(0.6) }
+        return isConflicting ? TempoTheme.alert.opacity(0.5) : TempoTheme.hairline
     }
 
     private func hintText(_ message: String) -> some View {
         Text(message)
             .font(.system(size: TempoTheme.FontSize.micro))
-            .foregroundStyle(TempoTheme.completionCoral)
+            .foregroundStyle(TempoTheme.alert)
             .fixedSize(horizontal: false, vertical: true)
     }
 

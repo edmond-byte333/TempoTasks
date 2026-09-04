@@ -11,20 +11,61 @@ final class TaskPanelViewModelTests: XCTestCase {
 
         func fetchTasks(on day: LocalDay) throws -> [TaskItem] {
             if shouldFailFetch { throw TestError.fetch }
-            return items.filter { $0.localDay == day }.sorted(by: SwiftDataTaskRepository.sortTasks)
+            return items
+                .filter { !$0.isUnscheduled && $0.localDay == day }
+                .sorted(by: SwiftDataTaskRepository.sortTasks)
         }
 
-        func create(title: String, dueDay: LocalDay, now: Date) throws -> TaskItem {
+        func fetchBacklog(today: LocalDay) throws -> [TaskItem] {
+            if shouldFailFetch { throw TestError.fetch }
+            return items
+                .filter { !$0.isCompleted && ($0.isUnscheduled || $0.localDay < today) }
+                .sorted(by: SwiftDataTaskRepository.sortBacklog)
+        }
+
+        func create(title: String, dueDay: LocalDay, isUnscheduled: Bool, now: Date) throws -> TaskItem {
             if shouldFailWrite { throw TestError.write }
-            let item = TaskItem(title: title, dueDay: dueDay, createdAt: now)
+            let item = TaskItem(
+                title: title,
+                dueDay: dueDay,
+                createdAt: now,
+                isUnscheduled: isUnscheduled
+            )
             items.append(item)
             return item
+        }
+
+        func fetchCompleted(limit: Int) throws -> [TaskItem] {
+            if shouldFailFetch { throw TestError.fetch }
+            return items
+                .filter(\.isCompleted)
+                .sorted { ($0.completedAt ?? .distantPast) > ($1.completedAt ?? .distantPast) }
+                .prefix(limit)
+                .map { $0 }
         }
 
         func setCompleted(_ task: TaskItem, completed: Bool, now: Date) throws {
             if shouldFailWrite { throw TestError.write }
             task.isCompleted = completed
             task.completedAt = completed ? now : nil
+        }
+
+        func setCompleted(_ tasks: [TaskItem], completed: Bool, now: Date) throws {
+            if shouldFailWrite { throw TestError.write }
+            for task in tasks {
+                task.isCompleted = completed
+                task.completedAt = completed ? now : nil
+            }
+        }
+
+        func schedule(_ task: TaskItem, to day: LocalDay?) throws {
+            if shouldFailWrite { throw TestError.write }
+            if let day {
+                task.isUnscheduled = false
+                task.localDay = day
+            } else {
+                task.isUnscheduled = true
+            }
         }
 
         func delete(_ task: TaskItem) throws -> TaskSnapshot {
@@ -97,6 +138,8 @@ final class TaskPanelViewModelTests: XCTestCase {
             nowProvider: { self.fixedNow },
             timeZoneProvider: { self.utc }
         )
+        // 面板默认停在待办；按天缓存要在某一天的视图下验证。
+        model.select(.today)
         XCTAssertEqual(model.tasks.map(\.title), ["缓存任务"])
 
         repository.shouldFailFetch = true
